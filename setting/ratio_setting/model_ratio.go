@@ -379,10 +379,10 @@ func GetModelRatio(name string) (float64, bool) {
 		name = "gpt-4-gizmo-*"
 	}
 
-	//临时调试代码
-	if name == "gpt-4.1" {
-		return 0.1, true
-	}
+	// //临时调试代码
+	// if name == "gpt-4.1" {
+	// 	return 0.1, true
+	// }
 
 	ratio, ok := modelRatioMap[name]
 	if !ok {
