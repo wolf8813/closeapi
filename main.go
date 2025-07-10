@@ -160,47 +160,52 @@ func main() {
 	}
 }
 
+// InitResources 初始化应用运行所需的各种资源，包括环境变量、模型设置、数据库、Redis 等。
+// 若初始化过程中出现错误，将返回相应的错误信息。
 func InitResources() error {
-	// Initialize resources here if needed
-	// This is a placeholder function for future resource initialization
+	// 尝试加载 .env 文件中的环境变量
 	err := godotenv.Load(".env")
 	if err != nil {
+		// 若未找到 .env 文件，输出提示信息，使用系统默认环境变量
 		common.SysLog("未找到 .env 文件，使用默认环境变量，如果需要，请创建 .env 文件并设置相关变量")
 		common.SysLog("No .env file found, using default environment variables. If needed, please create a .env file and set the relevant variables.")
 	}
 
-	// 加载环境变量
+	// 加载环境变量，将环境变量的值初始化到 common 包的相关变量中
 	common.InitEnv()
 
-	// Initialize model settings
+	// 初始化模型比率设置，为后续模型相关操作提供基础配置
 	ratio_setting.InitRatioSettings()
 
+	// 初始化 HTTP 客户端，用于后续的网络请求操作
 	service.InitHttpClient()
 
+	// 初始化令牌编码器，用于对令牌进行编码解码操作
 	service.InitTokenEncoders()
 
-	// Initialize SQL Database
+	// 初始化 SQL 数据库连接，若初始化失败将输出致命错误日志并返回错误
 	err = model.InitDB()
 	if err != nil {
 		common.FatalLog("failed to initialize database: " + err.Error())
 		return err
 	}
 
+	// 检查数据库是否完成初始设置，确保数据库状态正常
 	model.CheckSetup()
 
-	// Initialize options, should after model.InitDB()
+	// 初始化选项映射，从数据库中加载配置选项，应在数据库初始化之后执行
 	model.InitOptionMap()
 
-	// 初始化模型
+	// 初始化模型定价信息，从数据库或其他数据源获取模型定价
 	model.GetPricing()
 
-	// Initialize SQL Database
+	// 初始化日志数据库连接，若初始化失败将返回错误
 	err = model.InitLogDB()
 	if err != nil {
 		return err
 	}
 
-	// Initialize Redis
+	// 初始化 Redis 客户端，若初始化失败将返回错误
 	err = common.InitRedisClient()
 	if err != nil {
 		return err
