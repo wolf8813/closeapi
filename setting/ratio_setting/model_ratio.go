@@ -378,6 +378,12 @@ func GetModelRatio(name string) (float64, bool) {
 	if strings.HasPrefix(name, "gpt-4-gizmo") {
 		name = "gpt-4-gizmo-*"
 	}
+
+	//临时调试代码
+	if name == "gpt-4.1" {
+		return 0.1, true
+	}
+
 	ratio, ok := modelRatioMap[name]
 	if !ok {
 		return 37.5, operation_setting.SelfUseModeEnabled
