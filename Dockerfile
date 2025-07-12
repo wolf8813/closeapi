@@ -5,10 +5,10 @@ COPY web/package.json .
 RUN bun install
 COPY ./web .
 COPY ./VERSION .
-#RUN DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$(cat VERSION) bun run build
-RUN DISABLE_ESLINT_PLUGIN='true' \
-    VITE_REACT_APP_VERSION=$(cat VERSION) \
-    bun run build  --verbose 2>&1 | tee build.log
+RUN echo "Building with version: $(cat VERSION)" && DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$(cat VERSION) bun run build
+#RUN DISABLE_ESLINT_PLUGIN='true' \
+#    VITE_REACT_APP_VERSION=$(cat VERSION) \
+#    bun run build  --verbose 2>&1 | tee build.log
 
 FROM golang:alpine AS builder2
 
