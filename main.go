@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"one-api/common"
+	"one-api/common2"
 	"one-api/constant"
 	"one-api/controller"
 	"one-api/middleware"
@@ -210,5 +211,12 @@ func InitResources() error {
 	if err != nil {
 		return err
 	}
+
+	// 初始化 MinIO 客户端，若初始化失败将返回错误
+	err = common2.InitIdriveClient()
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
