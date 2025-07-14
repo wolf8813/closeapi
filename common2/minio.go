@@ -18,6 +18,9 @@ const (
 	defaultBucketName = "closeai"
 )
 
+// MinioClient 是 MinIO 客户端实例，用于与 MinIO 服务进行交互。
+// 该实例通过 minio.New 函数创建，配置了访问密钥、秘密密钥和服务端端点。
+// 它提供了一系列方法用于上传、下载、删除和管理对象（如文件）在 MinIO 存储桶中。
 var MinioClient *minio.Client
 
 // 初始化
@@ -64,6 +67,9 @@ func InitIdriveClient() error {
 	return nil
 }
 
+// UploadToIdrive 上传指定内容到指定的存储桶中。
+// 该函数接收上下文、存储桶名称、对象键和文件内容作为参数，返回上传后的对象唯一键或可能的错误。
+// 若上传过程中出现错误，将返回空字符串和相应的错误信息；若上传成功，返回对象唯一键和 nil。
 func UploadToIdrive(ctx context.Context, bucketName string, objectKey string, content []byte) (string, error) {
 	if bucketName == "" {
 		bucketName = defaultBucketName
@@ -79,6 +85,9 @@ func UploadToIdrive(ctx context.Context, bucketName string, objectKey string, co
 	return objectKey, nil
 }
 
+// DownloadFromIdrive 从指定的存储桶中下载指定对象（文件）。
+// 该函数接收上下文、存储桶名称和对象键作为参数，返回下载的文件内容和可能的错误。
+// 若下载过程中出现错误，将返回 nil 和相应的错误信息；若下载成功，返回文件内容和 nil。
 func DownloadFromIdrive(ctx context.Context, bucketName string, objectKey string) ([]byte, error) {
 	if bucketName == "" {
 		bucketName = defaultBucketName

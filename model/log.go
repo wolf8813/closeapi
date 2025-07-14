@@ -19,31 +19,31 @@ type Log struct {
 	Id               int    `json:"id" gorm:"index:idx_created_at_id,priority:1"`
 	UserId           int    `json:"user_id" gorm:"index"`
 	CreatedAt        int64  `json:"created_at" gorm:"bigint;index:idx_created_at_id,priority:2;index:idx_created_at_type"`
-	Type             int    `json:"type" gorm:"index:idx_created_at_type"`
-	Content          string `json:"content"`
+	Type             int    `json:"type" gorm:"index:idx_created_at_type"` //日志类型
+	Content          string `json:"content"`                               //原始请求内容/错误信息
 	Username         string `json:"username" gorm:"index;index:index_username_model_name,priority:2;default:''"`
-	TokenName        string `json:"token_name" gorm:"index;default:''"`
-	ModelName        string `json:"model_name" gorm:"index;index:index_username_model_name,priority:1;default:''"`
-	Quota            int    `json:"quota" gorm:"default:0"`
-	PromptTokens     int    `json:"prompt_tokens" gorm:"default:0"`
-	CompletionTokens int    `json:"completion_tokens" gorm:"default:0"`
-	UseTime          int    `json:"use_time" gorm:"default:0"`
-	IsStream         bool   `json:"is_stream" gorm:"default:false"`
-	ChannelId        int    `json:"channel" gorm:"index"`
-	ChannelName      string `json:"channel_name" gorm:"->"`
-	TokenId          int    `json:"token_id" gorm:"default:0;index"`
-	Group            string `json:"group" gorm:"index"`
-	Ip               string `json:"ip" gorm:"index;default:''"`
-	Other            string `json:"other"`
+	TokenName        string `json:"token_name" gorm:"index;default:''"`                                            //API令牌名称
+	ModelName        string `json:"model_name" gorm:"index;index:index_username_model_name,priority:1;default:''"` //模型名称
+	Quota            int    `json:"quota" gorm:"default:0"`                                                        //消耗的配额
+	PromptTokens     int    `json:"prompt_tokens" gorm:"default:0"`                                                //提示词token数
+	CompletionTokens int    `json:"completion_tokens" gorm:"default:0"`                                            //补全结果token数
+	UseTime          int    `json:"use_time" gorm:"default:0"`                                                     //请求耗时（秒）
+	IsStream         bool   `json:"is_stream" gorm:"default:false"`                                                //是否流式响应
+	ChannelId        int    `json:"channel" gorm:"index"`                                                          //渠道ID
+	ChannelName      string `json:"channel_name" gorm:"->"`                                                        //渠道名称
+	TokenId          int    `json:"token_id" gorm:"default:0;index"`                                               //令牌ID
+	Group            string `json:"group" gorm:"index"`                                                            //请求分组
+	Ip               string `json:"ip" gorm:"index;default:''"`                                                    //请求IP
+	Other            string `json:"other"`                                                                         //扩展字段（JSON格式）
 }
 
 const (
-	LogTypeUnknown = iota
-	LogTypeTopup
-	LogTypeConsume
-	LogTypeManage
-	LogTypeSystem
-	LogTypeError
+	LogTypeUnknown = iota // 0-未知类型
+	LogTypeTopup          // 1-充值记录
+	LogTypeConsume        // 2-API消费记录（主要类型）
+	LogTypeManage         // 3-管理操作
+	LogTypeSystem         // 4-系统日志
+	LogTypeError          // 5-错误日志
 )
 
 func formatUserLogs(logs []*Log) {
@@ -399,4 +399,27 @@ func DeleteOldLog(ctx context.Context, targetTimestamp int64, limit int) (int64,
 	}
 
 	return total, nil
+}
+
+type Log2 struct {
+	Id        int    `json:"id" gorm:"index:idx_created_at_id,priority:1"`
+	UserId    int    `json:"user_id" gorm:"index"`
+	CreatedAt int64  `json:"created_at" gorm:"bigint;index:idx_created_at_id,priority:2;index:idx_created_at_type"`
+	RequestId string `json:"request_id" gorm:"index;default:''"`
+}
+
+// SaveRequestId 保存请求id
+func SaveRequestId(c *gin.Context, requestId string) error {
+	// 从上下文中获取基础信息
+	userId := c.GetInt("id")
+
+	logEntry := &Log2{
+		UserId:    userId,
+		CreatedAt: common.GetTimestamp(),
+		RequestId: requestId,
+	}
+
+	// 使用FirstOrCreate避免重复（利用uniqueIndex）
+	result := LOG_DB.Where(Log2{RequestId: requestId}).FirstOrCreate(logEntry)
+	return result.Error
 }
