@@ -35,6 +35,7 @@ type Log struct {
 	Group            string `json:"group" gorm:"index"`                                                            //请求分组
 	Ip               string `json:"ip" gorm:"index;default:''"`                                                    //请求IP
 	Other            string `json:"other"`                                                                         //扩展字段（JSON格式）
+	RequestId        string `json:"request_id" gorm:"index;default:''"`
 }
 
 const (

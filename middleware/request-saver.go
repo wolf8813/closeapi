@@ -3,6 +3,7 @@ package middleware
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"one-api/common"
 	"one-api/common2"
@@ -33,9 +34,9 @@ func AsyncRequestSaver() gin.HandlerFunc {
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
 
-				if _, err := common2.UploadToIdrive(ctx, "", requestId, body); err != nil {
+				objectKey := fmt.Sprintf("req_%s", requestId)
+				if _, err := common2.UploadToIdrive(ctx, "", objectKey, body); err != nil {
 					common.LogError(c, common.MessageWithRequestId("Idrive上传失败", requestId)+": "+err.Error())
-
 				}
 
 				// 2. 保存日志到数据库
