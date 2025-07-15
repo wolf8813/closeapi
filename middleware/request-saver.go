@@ -35,12 +35,14 @@ func AsyncRequestSaver() gin.HandlerFunc {
 				defer cancel()
 
 				objectKey := fmt.Sprintf("req_%s", requestId)
-				if _, err := common2.UploadToIdrive(ctx, "", objectKey, body); err != nil {
+				_, err := common2.UploadToIdrive(ctx, "", objectKey, body)
+				if err != nil {
 					common.LogError(c, common.MessageWithRequestId("Idrive上传失败", requestId)+": "+err.Error())
 				}
 
 				// 2. 保存日志到数据库
-				if err := model.SaveRequestId(c, requestId); err != nil {
+				err = model.SaveRequestId(c, requestId)
+				if err != nil {
 					common.LogError(c, common.MessageWithRequestId("日志保存失败", requestId)+": "+err.Error())
 				}
 			}(bodyBytes, c.Request.URL.Path)

@@ -402,25 +402,30 @@ func DeleteOldLog(ctx context.Context, targetTimestamp int64, limit int) (int64,
 	return total, nil
 }
 
-type Log2 struct {
-	Id        int    `json:"id" gorm:"index:idx_created_at_id,priority:1"`
-	UserId    int    `json:"user_id" gorm:"index"`
-	CreatedAt int64  `json:"created_at" gorm:"bigint;index:idx_created_at_id,priority:2;index:idx_created_at_type"`
-	RequestId string `json:"request_id" gorm:"index;default:''"`
-}
-
 // SaveRequestId 保存请求id
 func SaveRequestId(c *gin.Context, requestId string) error {
-	// 从上下文中获取基础信息
-	userId := c.GetInt("id")
-
-	logEntry := &Log2{
-		UserId:    userId,
-		CreatedAt: common.GetTimestamp(),
-		RequestId: requestId,
+	if requestId == "" {
+		return nil
 	}
 
-	// 使用FirstOrCreate避免重复（利用uniqueIndex）
-	result := LOG_DB.Where(Log2{RequestId: requestId}).FirstOrCreate(logEntry)
-	return result.Error
+	userId := c.GetInt("id")
+	tokenId := c.GetInt("token_id")
+	tokenName := c.GetString("token_name")
+	tokenGroup := c.GetString("token_group")
+	logEntry := &Log{
+		RequestId: requestId,
+		UserId:    userId,
+		TokenId:   tokenId,
+		TokenName: tokenName,
+		Group:     tokenGroup,
+	}
+
+	// 使用FirstOrCreate避免重复
+	result := LOG_DB.Where(Log{RequestId: requestId}).FirstOrCreate(logEntry)
+	if result.Error != nil {
+		//保存request_id失败
+		common.LogError(c, common.MessageWithRequestId("保存请求id失败", requestId)+": "+result.Error.Error())
+		return result.Error
+	}
+	return nil
 }
