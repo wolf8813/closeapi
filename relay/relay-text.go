@@ -84,10 +84,14 @@ func getAndValidateTextRequest(c *gin.Context, relayInfo *relaycommon.RelayInfo)
 	return textRequest, nil
 }
 
+// TextHelper 处理文本相关的中继请求，包括请求验证、敏感词检查、模型映射、配额管理等操作，最终将请求转发并处理响应。
+// 参数 c 为 gin 上下文，包含请求和响应相关信息。
+// 返回值为 OpenAI 错误响应结构体指针，若请求处理过程中出现错误，返回相应的错误信息；若处理成功，返回 nil。
 func TextHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 
 	relayInfo := relaycommon.GenRelayInfo(c)
 
+	// 获取并验证文本请求，将请求体解析为 GeneralOpenAIRequest 结构体
 	// get & validate textRequest 获取并验证文本请求
 	textRequest, err := getAndValidateTextRequest(c, relayInfo)
 
@@ -96,10 +100,12 @@ func TextHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 		return service.OpenAIErrorWrapperLocal(err, "invalid_text_request", http.StatusBadRequest)
 	}
 
+	// 若请求中包含网页搜索选项，将搜索上下文大小设置到上下文中
 	if textRequest.WebSearchOptions != nil {
 		c.Set("chat_completion_web_search_context_size", textRequest.WebSearchOptions.SearchContextSize)
 	}
 
+	// 若配置要求检查敏感词，执行敏感词检查
 	if setting.ShouldCheckPromptSensitive() {
 		words, err := checkRequestSensitive(textRequest, relayInfo)
 		if err != nil {
@@ -108,6 +114,7 @@ func TextHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 		}
 	}
 
+	// 进行模型映射，将请求中的模型名称映射为实际使用的模型
 	err = helper.ModelMappedHelper(c, relayInfo, textRequest)
 	if err != nil {
 		return service.OpenAIErrorWrapperLocal(err, "model_mapped_error", http.StatusInternalServerError)
@@ -119,14 +126,17 @@ func TextHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 		promptTokens = value.(int)
 		relayInfo.PromptTokens = promptTokens
 	} else {
+		// 若上下文中不存在 promptTokens，调用 getPromptTokens 函数计算
 		promptTokens, err = getPromptTokens(textRequest, relayInfo)
 		// count messages token error 计算promptTokens错误
 		if err != nil {
 			return service.OpenAIErrorWrapper(err, "count_token_messages_failed", http.StatusInternalServerError)
 		}
+		// 将计算得到的 promptTokens 设置到上下文中
 		c.Set("prompt_tokens", promptTokens)
 	}
 
+	// 计算模型价格，根据输入令牌数和最大输出令牌数计算所需费用
 	priceData, err := helper.ModelPriceHelper(c, relayInfo, promptTokens, int(math.Max(float64(textRequest.MaxTokens), float64(textRequest.MaxCompletionTokens))))
 	if err != nil {
 		return service.OpenAIErrorWrapperLocal(err, "model_price_error", http.StatusInternalServerError)
@@ -137,11 +147,14 @@ func TextHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 	if openaiErr != nil {
 		return openaiErr
 	}
+
+	// 使用 defer 确保在函数返回前检查是否需要退还预扣的配额
 	defer func() {
 		if openaiErr != nil {
 			returnPreConsumedQuota(c, relayInfo, userQuota, preConsumedQuota)
 		}
 	}()
+
 	includeUsage := false
 	// 判断用户是否需要返回使用情况
 	if textRequest.StreamOptions != nil && textRequest.StreamOptions.IncludeUsage {
@@ -160,24 +173,31 @@ func TextHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 		}
 	}
 
+	// 若需要返回使用情况，设置中继信息中的相应标志
 	if includeUsage {
 		relayInfo.ShouldIncludeUsage = true
 	}
 
+	// 根据 API 类型获取对应的适配器
 	adaptor := GetAdaptor(relayInfo.ApiType)
 	if adaptor == nil {
 		return service.OpenAIErrorWrapperLocal(fmt.Errorf("invalid api type: %d", relayInfo.ApiType), "invalid_api_type", http.StatusBadRequest)
 	}
+	// 初始化适配器
 	adaptor.Init(relayInfo)
+
 	var requestBody io.Reader
 
+	// 检查是否启用了透传请求
 	if model_setting.GetGlobalSettings().PassThroughRequestEnabled {
+		// 若启用，直接获取请求体
 		body, err := common.GetRequestBody(c)
 		if err != nil {
 			return service.OpenAIErrorWrapperLocal(err, "get_request_body_failed", http.StatusInternalServerError)
 		}
 		requestBody = bytes.NewBuffer(body)
 	} else {
+		// 若未启用，将请求转换为适配器所需的格式
 		convertedRequest, err := adaptor.ConvertOpenAIRequest(c, relayInfo, textRequest)
 		if err != nil {
 			return service.OpenAIErrorWrapperLocal(err, "convert_request_failed", http.StatusInternalServerError)
@@ -188,12 +208,14 @@ func TextHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 		}
 
 		// apply param override
+		// 检查是否需要应用参数覆盖
 		if len(relayInfo.ParamOverride) > 0 {
 			reqMap := make(map[string]interface{})
 			err = json.Unmarshal(jsonData, &reqMap)
 			if err != nil {
 				return service.OpenAIErrorWrapperLocal(err, "param_override_unmarshal_failed", http.StatusInternalServerError)
 			}
+			// 应用参数覆盖，将参数覆盖信息合并到请求 map 中
 			for key, value := range relayInfo.ParamOverride {
 				reqMap[key] = value
 			}
@@ -203,6 +225,7 @@ func TextHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 			}
 		}
 
+		// 若开启调试模式，打印请求体内容
 		if common.DebugEnabled {
 			println("requestBody: ", string(jsonData))
 		}
@@ -210,6 +233,8 @@ func TextHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 	}
 
 	var httpResp *http.Response
+
+	// 调用适配器的 DoRequest 方法发送请求
 	resp, err := adaptor.DoRequest(c, relayInfo, requestBody)
 
 	if err != nil {
@@ -218,9 +243,16 @@ func TextHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 
 	statusCodeMappingStr := c.GetString("status_code_mapping")
 
+	// 若响应不为空，将响应转换为 http.Response 类型
 	if resp != nil {
 		httpResp = resp.(*http.Response)
+
+		//【重要】response保存到上下文
+		c.Set("response", httpResp)
+
+		// 判断是否为流式响应
 		relayInfo.IsStream = relayInfo.IsStream || strings.HasPrefix(httpResp.Header.Get("Content-Type"), "text/event-stream")
+		// 检查响应状态码是否为 200 OK
 		if httpResp.StatusCode != http.StatusOK {
 			openaiErr = service.RelayErrorHandler(httpResp, false)
 			// reset status code 重置状态码
@@ -229,6 +261,7 @@ func TextHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 		}
 	}
 
+	// 调用适配器的 DoResponse 方法处理响应
 	usage, openaiErr := adaptor.DoResponse(c, httpResp, relayInfo)
 	if openaiErr != nil {
 		// reset status code 重置状态码
@@ -236,11 +269,15 @@ func TextHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 		return openaiErr
 	}
 
+	// 检查模型名称是否以 gpt-4o-audio 开头
 	if strings.HasPrefix(relayInfo.OriginModelName, "gpt-4o-audio") {
+		// 若是音频模型，调用音频配额扣除函数
 		service.PostAudioConsumeQuota(c, relayInfo, usage.(*dto.Usage), preConsumedQuota, userQuota, priceData, "")
 	} else {
+		// 若不是音频模型，调用普通配额扣除函数
 		postConsumeQuota(c, relayInfo, usage.(*dto.Usage), preConsumedQuota, userQuota, priceData, "")
 	}
+
 	return nil
 }
 
