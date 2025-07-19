@@ -2,11 +2,15 @@ package common
 
 import (
 	"bytes"
-	"github.com/gin-gonic/gin"
+	"errors"
+	"fmt"
 	"io"
+	"net/http"
 	"one-api/constant"
 	"strings"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 const KeyRequestBody = "key_request_body"
@@ -23,6 +27,23 @@ func GetRequestBody(c *gin.Context) ([]byte, error) {
 	_ = c.Request.Body.Close()
 	c.Set(KeyRequestBody, requestBody)
 	return requestBody.([]byte), nil
+}
+
+func GetResponseBody(c *gin.Context) ([]byte, error) {
+	resp, exists := c.Get("response")
+	if !exists {
+		return nil, errors.New("未能从上下文中获取响应")
+	}
+	httpResp, ok := resp.(*http.Response)
+	if !ok {
+		return nil, errors.New("响应类型转换失败")
+	}
+	responseBody, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("读取响应体失败: %v", err)
+	}
+	return responseBody, nil
+
 }
 
 func UnmarshalBodyReusable(c *gin.Context, v any) error {

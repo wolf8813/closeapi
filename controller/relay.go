@@ -103,49 +103,35 @@ func relayHandler(c *gin.Context, relayMode int) *dto.OpenAIErrorWithStatusCode 
 // SaveReqAndRespToIdrive 从上下文中提取 request_id、request 和 response，上传到 Idrive，并将 request_id 存储到 MySQL
 // 参数 c 为 gin 上下文，包含请求和响应相关信息
 func SaveReqAndRespToIdrive(c *gin.Context) {
+	type JsonContent struct {
+		RequestId    string `json:"request_id"`
+		RequestBody  []byte `json:"requestBody"`
+		ResponseBody []byte `json:"response"`
+	}
+	var jsonContent JsonContent
+
 	// 从上下文中获取 request_id
 	requestId := c.GetString(common.RequestIdKey)
 	if requestId == "" {
 		common.LogError(c, "未能从上下文中获取 request_id")
 		return
 	}
+	jsonContent.RequestId = requestId
 
 	// 从上下文中获取请求体
 	requestBody, err := common.GetRequestBody(c)
 	if err != nil {
 		common.LogError(c, fmt.Sprintf("获取请求体失败: %v", err))
-		return
 	}
+	jsonContent.RequestBody = requestBody
 
 	// 从上下文中获取响应
-	resp, exists := c.Get("response")
-	if !exists {
-		common.LogError(c, "未能从上下文中获取响应")
-		return
-	}
-	httpResp, ok := resp.(*http.Response)
-	if !ok {
-		common.LogError(c, "响应类型转换失败")
-		return
-	}
-	responseBody, err := io.ReadAll(httpResp.Body)
+	responseBody, err := common.GetResponseBody(c)
 	if err != nil {
-		common.LogError(c, fmt.Sprintf("读取响应体失败: %v", err))
-		return
+		common.LogError(c, fmt.Sprintf("获取响应体失败: %v", err))
 	}
-	// 恢复响应体，避免影响后续处理
-	httpResp.Body = io.NopCloser(bytes.NewBuffer(responseBody))
+	jsonContent.ResponseBody = responseBody
 
-	type JsonContent struct {
-		RequestId string `json:"request_id"`
-		Request   string `json:"request"`
-		Response  string `json:"response"`
-	}
-	jsonContent := JsonContent{
-		RequestId: requestId,
-		Request:   string(requestBody),
-		Response:  string(responseBody),
-	}
 	jsonContentBytes, err := json.Marshal(jsonContent)
 	if err != nil {
 		common.LogError(c, fmt.Sprintf("Json 序列化失败: %v", err))
@@ -162,6 +148,7 @@ func SaveReqAndRespToIdrive(c *gin.Context) {
 	err = model.SaveRequestId(c, requestId)
 	if err != nil {
 		common.LogError(c, fmt.Sprintf("request_id 存储到 MySQL 失败: %v", err))
+		return
 	}
 }
 
