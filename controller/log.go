@@ -219,21 +219,13 @@ func DeleteHistoryLogs(c *gin.Context) {
 // 输入参数：requstId
 // 输出参数：request,response
 func GetReqRespFromIdrive(c *gin.Context) {
-	type Data struct {
-		Request  map[string]any `json:"request"`
-		Response map[string]any `json:"response"`
-	}
-	data := Data{
-		Request:  map[string]any{},
-		Response: map[string]any{},
-	}
 
 	requestId := c.Query("requestId")
 	if requestId == "" {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "requestId is required",
-			"data":    data,
+			"data":    gin.H{},
 		})
 		return
 	}
@@ -243,51 +235,34 @@ func GetReqRespFromIdrive(c *gin.Context) {
 	defer func() {
 		if err != nil {
 			common.LogError(c, err.Error())
-		}
 
-		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"message": "发生了某些错误，请查下服务日志",
-			"data":    data,
-		})
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": err.Error(),
+				"data":    gin.H{},
+			})
+		}
 
 	}()
 
 	//idrive上读取request
-	reqObjectKey := fmt.Sprintf("req_%s", requestId)
-	bResult, err := common2.DownloadFromIdrive(c, "", reqObjectKey)
+	bResult, err := common2.DownloadFromIdrive(c, "", requestId)
 	if err != nil {
 		err = fmt.Errorf("download request from idrive failed, err: %s", err.Error())
 		return
 	}
-	var reqJson map[string]any
-	err = json.Unmarshal(bResult, &reqJson)
+	var jsonResult map[string]any
+	err = json.Unmarshal(bResult, &jsonResult)
 	if err != nil {
-		err = fmt.Errorf("unmarshal request from idrive failed, err: %s", err.Error())
+		err = fmt.Errorf("unmarshal result from idrive failed, err: %s", err.Error())
 		return
 	}
-	data.Request = reqJson
-
-	//idrive上读取response
-	respObjectKey := fmt.Sprintf("resp_%s", requestId)
-	bResult, err = common2.DownloadFromIdrive(c, "", respObjectKey)
-	if err != nil {
-		err = fmt.Errorf("download response from idrive failed, err: %s", err.Error())
-		return
-	}
-	var respJson map[string]any
-	err = json.Unmarshal(bResult, &respJson)
-	if err != nil {
-		err = fmt.Errorf("unmarshal response from idrive failed, err: %s", err.Error())
-		return
-	}
-	data.Response = respJson
 
 	//返回结果
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    data,
+		"data":    jsonResult,
 	})
 
 }

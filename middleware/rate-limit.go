@@ -3,10 +3,11 @@ package middleware
 import (
 	"context"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"net/http"
 	"one-api/common"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 var timeFormat = "2006-01-02T15:04:05.000Z"
@@ -93,10 +94,17 @@ func GlobalWebRateLimit() func(c *gin.Context) {
 	return defNext
 }
 
+// GlobalAPIRateLimit 返回一个 Gin 中间件函数，用于对全局 API 请求进行速率限制。
+// 若启用了全局 API 速率限制，会根据配置的最大请求数和时间间隔进行限制；
+// 若未启用，则直接放行请求。
 func GlobalAPIRateLimit() func(c *gin.Context) {
+	// 检查全局 API 速率限制是否启用
 	if common.GlobalApiRateLimitEnable {
+		// 若启用，调用 rateLimitFactory 函数创建速率限制中间件
+		// 传入全局 API 速率限制的最大请求数、时间间隔和标识 "GA"
 		return rateLimitFactory(common.GlobalApiRateLimitNum, common.GlobalApiRateLimitDuration, "GA")
 	}
+	// 若未启用，返回默认的放行函数，直接调用 c.Next() 放行请求
 	return defNext
 }
 

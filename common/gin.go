@@ -29,21 +29,27 @@ func GetRequestBody(c *gin.Context) ([]byte, error) {
 	return requestBody.([]byte), nil
 }
 
+// GetResponseBody 从 gin 上下文中获取响应体的字节切片。
+// 参数 c 为 gin 上下文，包含请求和响应相关信息。
+// 返回值为响应体的字节切片和可能出现的错误。若成功获取响应体则返回字节切片和 nil；若出现错误则返回 nil 和相应错误信息。
 func GetResponseBody(c *gin.Context) ([]byte, error) {
+	// 从上下文中获取响应对象
 	resp, exists := c.Get("response")
 	if !exists {
 		return nil, errors.New("未能从上下文中获取响应")
 	}
+	// 将获取到的响应对象转换为 *http.Response 类型
 	httpResp, ok := resp.(*http.Response)
 	if !ok {
 		return nil, errors.New("响应类型转换失败")
 	}
+	// 读取响应体的所有内容
 	responseBody, err := io.ReadAll(httpResp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("读取响应体失败: %v", err)
 	}
+	// 成功读取响应体，返回响应体字节切片和 nil
 	return responseBody, nil
-
 }
 
 func UnmarshalBodyReusable(c *gin.Context, v any) error {
