@@ -159,6 +159,12 @@ func main() {
 	if err != nil {
 		common.FatalLog("failed to start HTTP server: " + err.Error())
 	}
+
+	// // 在已有初始化代码后添加
+	// if os.Getenv("CHANNEL_SYNC_ENABLED") == "true" {
+	// 	go controller.StartChannelSync()
+	// 	common.SysLog("启动频道同步服务")
+	// }
 }
 
 // InitResources 初始化应用运行所需的各种资源，包括环境变量、模型设置、数据库、Redis 等。
