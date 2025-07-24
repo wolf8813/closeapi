@@ -16,6 +16,9 @@ type Channel struct {
 	Name string
 }
 
+// getMySQLDSN 根据数据库类型生成MySQL连接字符串
+// 参数 dbType: 数据库标识（A/B）
+// 返回值: MySQL DSN连接字符串
 func getMySQLDSN(dbType string) string {
 	switch dbType {
 	case "A":
@@ -35,17 +38,32 @@ func getMySQLDSN(dbType string) string {
 	}
 }
 
+// StartChannelSync 启动定时同步服务
+// 功能说明：
+// 1. 初始化双数据库连接（A/B两个数据源）
+// 2. 创建10分钟间隔的定时器
+// 3. 启动无限循环执行同步任务
 func StartChannelSync() {
-	// 初始化双数据库连接
+	// 初始化主数据库连接（数据库A）
 	dbA := initDBConnection(getMySQLDSN("A"))
+	// 初始化备用数据库连接（数据库B）
 	dbB := initDBConnection(getMySQLDSN("B"))
-	defer dbA.Close()
-	defer dbB.Close()
+	defer dbA.Close() // 确保程序退出时释放数据库连接
+	defer dbB.Close() // 确保程序退出时释放数据库连接
 
-	ticker := time.NewTicker(10 * time.Minute)
-	defer ticker.Stop()
+	for {
+		now := time.Now()
+		// 计算到下一个整10分钟的时间间隔
+		next := now.Truncate(10 * time.Minute).Add(10 * time.Minute)
+		// 计算等待时长：下一个触发时间点与当前时间的差值
+		waitDuration := next.Sub(now)
+		//日志记录now, next, waitDuration
+		common.SysLog(fmt.Sprintf("[ChannelSync] 当前时间: %s, 下次同步时间: %s, 等待时间: %s",
+			now.Format("2006-01-02 15:04:05"), next.Format("2006-01-02 15:04:05"), waitDuration))
 
-	for range ticker.C {
+		time.Sleep(waitDuration)
+
+		// 执行同步任务
 		syncChannels(dbA, dbB)
 	}
 }
