@@ -28,7 +28,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 	"time"
 
@@ -36,8 +35,8 @@ import (
 )
 
 type Channel struct {
-	ID   int
-	Name string
+	Id   int            `json:"id"`
+	Name sql.NullString `json:"name"`
 }
 
 // getMySQLDSN 根据数据库类型生成MySQL连接字符串
@@ -47,16 +46,16 @@ func getMySQLDSN(dbType string) string {
 	switch dbType {
 	case "A":
 		return fmt.Sprintf("%s:%s@tcp(%s)/%s",
-			os.Getenv("root"),
-			os.Getenv("new.1234"),
-			os.Getenv("127.0.0.1:3306"),
-			os.Getenv("mysql"))
+			"root",
+			"new.1234",
+			"127.0.0.1:3306",
+			"mysql")
 	case "B":
 		return fmt.Sprintf("%s:%s@tcp(%s)/%s",
-			os.Getenv("root"),
-			os.Getenv("yeqiu669."),
-			os.Getenv("38.147.104.170:3366"),
-			os.Getenv("new-api"))
+			"root",
+			"yeqiu669.",
+			"38.147.104.170:3366",
+			"new-api")
 	default:
 		return ""
 	}
@@ -196,14 +195,14 @@ func getDeleteIDs(a, b []Channel) []interface{} {
 	// 创建目标数据集哈希表用于快速查找
 	bMap := make(map[int]bool)
 	for _, ch := range b {
-		bMap[ch.ID] = true // 标记目标库存在的ID
+		bMap[ch.Id] = true // 标记目标库存在的ID
 	}
 
 	var deleteIDs []interface{}
 	// 遍历源数据找出目标库不存在的记录
 	for _, ch := range a {
-		if !bMap[ch.ID] {
-			deleteIDs = append(deleteIDs, ch.ID) // 收集需要删除的ID
+		if !bMap[ch.Id] {
+			deleteIDs = append(deleteIDs, ch.Id) // 收集需要删除的ID
 		}
 	}
 	return deleteIDs
@@ -230,9 +229,9 @@ func batchUpsert(tx *sql.Tx, channels []Channel) error {
 	defer stmt.Close()
 
 	for _, ch := range channels {
-		if _, err := stmt.Exec(ch.ID, ch.Name); err != nil {
+		if _, err := stmt.Exec(ch.Id, ch.Name); err != nil {
 			tx.Rollback()
-			return fmt.Errorf("插入失败(ID:%d): %w", ch.ID, err)
+			return fmt.Errorf("插入失败(ID:%d): %w", ch.Id, err)
 		}
 	}
 	return nil
@@ -240,7 +239,9 @@ func batchUpsert(tx *sql.Tx, channels []Channel) error {
 
 // 获取channels数据（复用已有数据库连接）
 func getChannels(db *sql.DB) ([]Channel, error) {
-	rows, err := db.Query("SELECT id, name FROM channels")
+	strFields := fmt.Sprintf("%s,%s", "id", "name")
+	strQuery := fmt.Sprintf("SELECT %s FROM channels", strFields)
+	rows, err := db.Query(strQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +250,7 @@ func getChannels(db *sql.DB) ([]Channel, error) {
 	var channels []Channel
 	for rows.Next() {
 		var ch Channel
-		if err := rows.Scan(&ch.ID, &ch.Name); err != nil {
+		if err := rows.Scan(&ch.Id, &ch.Name); err != nil {
 			return nil, err
 		}
 		channels = append(channels, ch)

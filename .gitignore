@@ -7,7 +7,7 @@ build
 *.db-journal
 logs
 web/dist
-.env
+#.env
 one-api
 .DS_Store
 tiktoken_cache
