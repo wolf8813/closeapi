@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,13 +17,11 @@ import (
 	"github.com/joho/godotenv"
 )
 
-func TestSaveReqAndRespToIdrive(t *testing.T) {
-	var err error
-
+func initTestResource() error {
 	// 获取当前文件所在目录
 	dir, err := os.Getwd()
 	if err != nil {
-		t.Fatalf("Failed to get current working directory: %v", err)
+		return err
 	}
 
 	// 拼接 .env 文件路径，假设 .env 文件在项目根目录
@@ -33,7 +32,7 @@ func TestSaveReqAndRespToIdrive(t *testing.T) {
 	if err != nil {
 		// 若未找到 .env 文件，输出提示信息，使用系统默认环境变量
 		common.SysLog("未找到 .env 文件，使用默认环境变量，如果需要，请创建 .env 文件并设置相关变量")
-		return
+		return err
 	}
 
 	// 加载环境变量，将环境变量的值初始化到 common 包的相关变量中
@@ -42,84 +41,104 @@ func TestSaveReqAndRespToIdrive(t *testing.T) {
 	err = model.InitDB()
 	if err != nil {
 		common.FatalLog("failed to init default db client: " + err.Error())
-		return
+		return err
 	}
 
 	//初始化Log数据库
 	err = model.InitLogDB()
 	if err != nil {
 		common.FatalLog("failed to init log db client: " + err.Error())
-		return
+		return err
 	}
 
 	//初始化idrive
 	err = common2.InitIdriveClient()
 	if err != nil {
 		common.FatalLog("failed to init idrive client: " + err.Error())
+		return err
+	}
+
+	return nil
+}
+
+func TestSaveReqAndRespToIdrive(t *testing.T) {
+	var err error
+
+	// 初始化测试资源
+	err = initTestResource()
+	if err != nil {
+		t.Fatalf("Failed to initialize test resources: %v", err)
 		return
 	}
 
 	//初始化上下文，并且构造request，以及set response
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 
+	type Message struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}
+
 	//初始化请求体
 	// 定义要写入的 JSON 内容
-	requestBodyJSON := `{
-		"model": "gpt-4",
-		"messages": [
+	type ReqBody struct {
+		Model   string    `json:"model"`
+		Message []Message `json:"messages"`
+	}
+	reqBody := ReqBody{
+		Model: "gpt-4",
+		Message: []Message{
 			{
-				"role": "developer",
-				"content": "你是一个有帮助的助手。"
+				Role:    "developer",
+				Content: "你是一个有帮助的助手。",
 			},
 			{
-				"role": "user",
-				"content": "你好！"
-			}
-		]
-	}`
+				Role:    "user",
+				Content: "你好！",
+			},
+		},
+	}
+	byteReqBody, err := json.Marshal(reqBody)
+	if err != nil {
+		t.Fatalf("Failed to marshal request body: %v", err)
+	}
 	// 将 JSON 内容写入请求体
-	req := httptest.NewRequest("POST", "/test", bytes.NewBufferString(requestBodyJSON))
+	req := httptest.NewRequest("POST", "/test", bytes.NewReader(byteReqBody))
 	req.Header.Set("Content-Type", "application/json")
 	c.Request = req
 
-	// 模拟响应内容
-	respBody := `{
-		"id": "chatcmpl-B9MBs8CjcvOU2jLn4n570S5qMJKcT",
-		"object": "chat.completion",
-		"created": 1741569952,
-		"model": "gpt-4.1-2025-04-14",
-		"choices": [
-			{
-				"index": 0,
-				"message": {
-					"role": "assistant",
-					"content": "你好！我能为你提供什么帮助？",
-					"refusal": null,
-					"annotations": []
-				},
-				"logprobs": null,
-				"finish_reason": "stop"
-			}
-		],
-		"usage": {
-			"prompt_tokens": 19,
-			"completion_tokens": 10,
-			"total_tokens": 29,
-			"prompt_tokens_details": {
-				"cached_tokens": 0,
-				"audio_tokens": 0
-			},
-			"completion_tokens_details": {
-				"reasoning_tokens": 0,
-				"audio_tokens": 0,
-				"accepted_prediction_tokens": 0,
-				"rejected_prediction_tokens": 0
-			}
-		},
-		"service_tier": "default"
-	}`
-	// 创建一个 bytes.Reader 来包装响应内容
-	bodyReader := bytes.NewReader([]byte(respBody))
+	type Choice struct {
+		Index   int     `json:"index"`
+		Message Message `json:"message"`
+	}
+	type Usage struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+		TotalTokens      int `json:"total_tokens"`
+	}
+	type RespBody struct {
+		Id          string   `json:"id"`
+		Object      string   `json:"object"`
+		Created     int64    `json:"created"`
+		Model       string   `json:"model"`
+		Choices     []Choice `json:"choices"`
+		Usage       Usage    `json:"usage"`
+		ServiceTier string   `json:"service_tier"`
+	}
+	respBody := RespBody{
+		Id:          "chatcmpl-B9MBs8CjcvOU2jLn4n570S5qMJKcT",
+		Object:      "chat.completion",
+		Created:     1741569952,
+		Model:       "gpt-4.1-2025-04-14",
+		Choices:     []Choice{{Index: 0, Message: Message{Role: "assistant", Content: "你好！我能为你提供什么帮助？"}}},
+		Usage:       Usage{PromptTokens: 19, CompletionTokens: 10, TotalTokens: 29},
+		ServiceTier: "default",
+	}
+	byteRespBody, err := json.Marshal(respBody)
+	if err != nil {
+		t.Fatalf("Failed to marshal response body: %v", err)
+	}
+	strRespBody := string(byteRespBody)
 
 	// 初始化 httpResp
 	resp := &http.Response{
@@ -131,8 +150,8 @@ func TestSaveReqAndRespToIdrive(t *testing.T) {
 		Header: http.Header{
 			"Content-Type": {"application/json"},
 		},
-		Body:          io.NopCloser(bodyReader),
-		ContentLength: int64(len(respBody)),
+		Body:          io.NopCloser(bytes.NewReader(byteRespBody)),
+		ContentLength: int64(len(strRespBody)),
 	}
 	//context保存response
 	c.Set("response", resp)

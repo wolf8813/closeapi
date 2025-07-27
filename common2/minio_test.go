@@ -84,11 +84,21 @@ func TestDownloadFromIdrive(t *testing.T) {
 	}
 
 	//下载
-	content, err := DownloadFromIdrive(context.Background(), defaultBucketName, "123456")
+	objectKey := "test_request_id"
+	content, err := DownloadFromIdrive(context.Background(), defaultBucketName, objectKey)
 	if err != nil {
 		t.Errorf("DownloadFromIdrive() error = %v", err)
 		return
 	}
 	t.Logf("DownloadFromIdrive() success, content = %v", content)
+
+	//content转化为map[string]any
+	var jsonResult map[string]any
+	err = json.Unmarshal(content, &jsonResult)
+	if err != nil {
+		t.Errorf("json.Unmarshal() error = %v", err)
+		return
+	}
+	t.Logf("json.Unmarshal() success, jsonResult = %v", jsonResult)
 
 }

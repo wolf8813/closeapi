@@ -105,8 +105,8 @@ func relayHandler(c *gin.Context, relayMode int) *dto.OpenAIErrorWithStatusCode 
 func SaveReqAndRespToIdrive(c *gin.Context) {
 	type JsonContent struct {
 		RequestId    string `json:"request_id"`
-		RequestBody  []byte `json:"requestBody"`
-		ResponseBody []byte `json:"response"`
+		RequestBody  any    `json:"requestBody"`
+		ResponseBody any    `json:"responseBody"`
 	}
 	var jsonContent JsonContent
 
@@ -122,15 +122,31 @@ func SaveReqAndRespToIdrive(c *gin.Context) {
 	requestBody, err := common.GetRequestBody(c)
 	if err != nil {
 		common.LogError(c, fmt.Sprintf("获取请求体失败: %v", err))
+		return
 	}
-	jsonContent.RequestBody = requestBody
+	// 将请求体反序列化为 map[string]interface{}
+	var reqBodyMap any
+	err = json.Unmarshal(requestBody, &reqBodyMap)
+	if err != nil {
+		common.LogError(c, fmt.Sprintf("请求体反序列化失败: %v", err))
+		return
+	}
+	jsonContent.RequestBody = reqBodyMap
 
 	// 从上下文中获取响应
 	responseBody, err := common.GetResponseBody(c)
 	if err != nil {
 		common.LogError(c, fmt.Sprintf("获取响应体失败: %v", err))
+		return
 	}
-	jsonContent.ResponseBody = responseBody
+	// 将响应体反序列化为 map[string]interface{}
+	var respBodyMap any
+	err = json.Unmarshal(responseBody, &respBodyMap)
+	if err != nil {
+		common.LogError(c, fmt.Sprintf("响应体反序列化失败: %v", err))
+		return
+	}
+	jsonContent.ResponseBody = respBodyMap
 
 	jsonContentBytes, err := json.Marshal(jsonContent)
 	if err != nil {
