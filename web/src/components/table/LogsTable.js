@@ -263,11 +263,18 @@ const LogsTable = () => {
     RETRY: 'retry',
     IP: 'ip',
     DETAILS: 'details',
+    REQUEST_ID: 'request_id',
   };
 
   // State for column visibility
   const [visibleColumns, setVisibleColumns] = useState({});
   const [showColumnSelector, setShowColumnSelector] = useState(false);
+  // 控制请求ID详情弹窗的显示状态
+  const [showRequestIdModal, setShowRequestIdModal] = useState(false);
+  // 存储选中的请求详情数据
+  const [selectedRequestData, setSelectedRequestData] = useState(null);
+  // 控制详情加载中的旋转状态
+  const [loadingRequestId, setLoadingRequestId] = useState(false);
 
   // Load saved column preferences from localStorage
   useEffect(() => {
@@ -305,6 +312,7 @@ const LogsTable = () => {
       [COLUMN_KEYS.RETRY]: isAdminUser,
       [COLUMN_KEYS.IP]: true,
       [COLUMN_KEYS.DETAILS]: true,
+      [COLUMN_KEYS.REQUEST_ID]: true,
     };
   };
 
@@ -343,12 +351,60 @@ const LogsTable = () => {
     setVisibleColumns(updatedColumns);
   };
 
+  const handleRequestIdClick = async (requestId) => {
+    // 参数有效性校验
+    if (!requestId) return;
+
+    // 开启加载状态指示
+    setLoadingRequestId(true);
+    try {
+      // 调用后端接口获取请求详情数据
+      const res = await API.get(`/api/log/getidrive?requestId=${requestId}`);
+      
+      // 处理接口成功响应
+      if (res.data.success) {
+        // 更新选中请求数据并打开弹窗
+        setSelectedRequestData(res.data.data);
+        setShowRequestIdModal(true);
+      } else {
+        // 显示后端返回的错误信息
+        showError(res.data.message);
+      }
+    } catch (error) {
+      // 处理网络请求异常
+      showError(t('请求详情获取失败'));
+    } finally {
+      // 无论成功失败都关闭加载状态
+      setLoadingRequestId(false);
+    }
+  };
+
   // Define all columns
   const allColumns = [
     {
       key: COLUMN_KEYS.TIME,
       title: t('时间'),
       dataIndex: 'timestamp2string',
+    },
+    {
+      key: COLUMN_KEYS.REQUEST_ID,       // 使用预定义的列键值
+      title: t('请求ID'),                // 国际化显示的列标题
+      dataIndex: 'request_id',           // 对应数据源的字段名称
+      width: 240,                        // 固定列宽
+      render: (text) => (                // 自定义单元格渲染函数
+        <Tag
+          color="grey"                   // 标签基础样式
+          onClick={(e) => {             // 点击事件处理
+            e.stopPropagation();         // 阻止事件冒泡
+            handleRequestIdClick(text);  // 触发请求详情弹窗
+          }}
+          style={{
+            cursor: text ? 'pointer' : 'default' // 根据内容设置指针样式
+          }}
+        >
+          {text || '--'}                  {/* 显示请求ID或占位符 */}
+        </Tag>
+      )
     },
     {
       key: COLUMN_KEYS.CHANNEL,
@@ -1206,6 +1262,27 @@ const LogsTable = () => {
   return (
     <>
       {renderColumnSelector()}
+
+      {/* 请求详情弹窗组件 ▼ */}
+      <Modal
+        title={t('请求详情')}            // 国际化弹窗标题
+        visible={showRequestIdModal}     // 绑定弹窗显示状态
+        onCancel={() => setShowRequestIdModal(false)} // 关闭弹窗回调
+        footer={null}                    // 隐藏默认底部操作栏
+        width={800}                      // 固定弹窗宽度为800px
+      >
+        <Spin spinning={loadingRequestId}>  {/* 加载状态指示器 */}
+          {/* 带滚动条的JSON数据展示区域 */}
+          <pre style={{ 
+            maxHeight: '60vh',          // 限制最大高度为视口60%
+            overflow: 'auto'            // 内容溢出时显示滚动条
+          }}>
+            {JSON.stringify(selectedRequestData, null, 2)} {/* 格式化显示JSON数据 */}
+          </pre>
+        </Spin>
+      </Modal>
+      {/* 请求详情弹窗组件 ▲ */}
+
       <Card
         className='!rounded-2xl mb-4'
         title={
