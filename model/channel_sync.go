@@ -71,18 +71,25 @@ func syncChannels(dbA, dbB *gorm.DB) {
 	startTime := time.Now()
 	common.SysLog(fmt.Sprintf("[ChannelSync] 开始同步 channels 表 (%s)", startTime.Format("2006-01-02 15:04:05")))
 
-	var channelsA, channelsB []Channel
-	if err := dbA.Where("id>0").Find(&channelsA).Error; err != nil {
+	var allChannelsA, allChannelsB []Channel
+
+	// 分页加载数据库A（每批500条）
+	if err := dbA.Where("id>0").FindInBatches(&allChannelsA, 500, func(tx *gorm.DB, batch int) error {
+		return nil
+	}).Error; err != nil {
 		common.SysError(fmt.Sprintf("获取MySQL-A数据失败: %v", err))
 		return
 	}
 
-	if err := dbB.Where("id>0").Find(&channelsB).Error; err != nil {
+	// 分页加载数据库B（每批500条）
+	if err := dbB.Where("id>0").FindInBatches(&allChannelsB, 500, func(tx *gorm.DB, batch int) error {
+		return nil
+	}).Error; err != nil {
 		common.SysError(fmt.Sprintf("获取MySQL-B数据失败: %v", err))
 		return
 	}
 
-	if err := atomicGORMUpdate(dbA, channelsA, channelsB); err != nil {
+	if err := atomicGORMUpdate(dbA, allChannelsA, allChannelsB); err != nil {
 		common.SysError(fmt.Sprintf("同步失败: %v", err))
 	} else {
 		common.SysLog(fmt.Sprintf("[ChannelSync] 同步完成，耗时 %v", time.Since(startTime).Round(time.Millisecond)))
@@ -114,7 +121,7 @@ func atomicGORMUpdate(db *gorm.DB, a, b []Channel) error {
 		if err = tx.Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "name"}},
 			DoNothing: true,
-		}).Create(&b).Error; err != nil {
+		}).CreateInBatches(&b, 200).Error; err != nil {
 			return fmt.Errorf("批量插入失败: %w", err) // 包装原始错误
 		}
 		return nil
@@ -147,7 +154,22 @@ func getDeleteIDs(a, b []Channel) []int {
 	return deleteIDs
 }
 
-// initGORMConnection 初始化GORM连接
+// initGORMConnection 初始化GORM数据库连接池
+// 参数：
+//
+//	dsn : 数据库连接字符串，格式示例："user:password@tcp(host:port)/dbname"
+//
+// 返回值：
+//
+//	*gorm.DB : 初始化完成的GORM数据库实例
+//
+// 注意：
+//  1. 连接池配置参数：
+//     - 最大打开连接数：20
+//     - 最大空闲连接数：10
+//     - 连接最大空闲时间：30分钟
+//     - 连接最大存活时间：5分钟
+//  2. 数据库连接失败会直接触发log.Fatal
 func initGORMConnection(dsn string) *gorm.DB {
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
 		//Logger: logger.Default.LogMode(logger.Info), // 开启 SQL 日志记录
@@ -158,6 +180,8 @@ func initGORMConnection(dsn string) *gorm.DB {
 
 	sqlDB, _ := db.DB()
 	sqlDB.SetMaxOpenConns(20)
+	sqlDB.SetMaxIdleConns(10)                  // 新增空闲连接数
+	sqlDB.SetConnMaxIdleTime(30 * time.Minute) // 新增空闲时间
 	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 	return db
 }
